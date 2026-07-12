@@ -1,26 +1,46 @@
-'use client';
 
-import { motion } from "framer-motion";
-import { PageHeader } from "@/components/common/PageHeader";
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+import AssetsClient from './AssetsClient';
 
-export default function AssetsPage() {
+export default async function AssetsPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return redirect('/login');
+  }
+
+  // Fetch user profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single();
+
+  // Fetch all data
+  const [
+    { data: assets },
+    { data: categories },
+    { data: departments },
+    { data: locations },
+    { data: employees }
+  ] = await Promise.all([
+    supabase.from('assets').select('*, category:asset_categories(*), assigned_employee:profiles(*), department:departments(*), location:locations(*)').eq('organization_id', profile.organization_id),
+    supabase.from('asset_categories').select('*').eq('organization_id', profile.organization_id).eq('is_active', true),
+    supabase.from('departments').select('*').eq('organization_id', profile.organization_id).eq('is_active', true),
+    supabase.from('locations').select('*').eq('organization_id', profile.organization_id).eq('is_active', true),
+    supabase.from('profiles').select('*').eq('organization_id', profile.organization_id),
+  ]);
+
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <PageHeader
-        title="Assets"
-        description="Track and manage all company assets."
-      />
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="mt-8 card-premium"
-      >
-        <div className="text-center py-12">
-          <h3 className="text-lg font-semibold text-foreground mb-2">Asset Management</h3>
-          <p className="text-muted-foreground">Coming soon</p>
-        </div>
-      </motion.div>
-    </div>
+    <AssetsClient
+      profile={profile}
+      assets={assets}
+      categories={categories}
+      departments={departments}
+      locations={locations}
+      employees={employees}
+    />
   );
 }
