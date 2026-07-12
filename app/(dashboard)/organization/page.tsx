@@ -1,26 +1,51 @@
-'use client';
 
-import { motion } from "framer-motion";
-import { PageHeader } from "@/components/common/PageHeader";
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+import OrganizationClient from './OrganizationClient';
 
-export default function OrganizationPage() {
+export default async function OrganizationPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return redirect('/login');
+  }
+
+  // Fetch user profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*, organizations(*)')
+    .eq('id', user.id)
+    .single();
+
+  // Check if user is admin
+  if (profile.role !== 'admin') {
+    return redirect('/dashboard');
+  }
+
+  // Fetch all data
+  const [
+    { data: departments },
+    { data: categories },
+    { data: employees },
+    { data: locations },
+    { data: desks }
+  ] = await Promise.all([
+    supabase.from('departments').select('*, department_head:profiles(*), parent_department:departments(*)').eq('organization_id', profile.organization_id),
+    supabase.from('asset_categories').select('*').eq('organization_id', profile.organization_id),
+    supabase.from('profiles').select('*, department:departments(*)').eq('organization_id', profile.organization_id),
+    supabase.from('locations').select('*').eq('organization_id', profile.organization_id),
+    supabase.from('desks').select('*, location:locations(*), assigned_employee:profiles(*)').eq('organization_id', profile.organization_id),
+  ]);
+
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <PageHeader
-        title="Organization Setup"
-        description="Manage your departments, employees, and company structure."
-      />
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="mt-8 card-premium"
-      >
-        <div className="text-center py-12">
-          <h3 className="text-lg font-semibold text-foreground mb-2">Organization Management</h3>
-          <p className="text-muted-foreground">Coming soon</p>
-        </div>
-      </motion.div>
-    </div>
+    <OrganizationClient
+      profile={profile}
+      departments={departments}
+      categories={categories}
+      employees={employees}
+      locations={locations}
+      desks={desks}
+    />
   );
 }
