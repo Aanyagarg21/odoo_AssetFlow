@@ -106,150 +106,7 @@ CREATE TYPE notification_type AS ENUM (
 );
 
 -- =======================================
--- 2. HELPERS & UTILITY FUNCTIONS
--- =======================================
-
--- Helper function to get current organization id from JWT
-CREATE OR REPLACE FUNCTION current_organization_id()
-RETURNS UUID
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT nullif(current_setting('request.jwt.claims', true)::json->>'organization_id', '')::uuid;
-$$;
-
--- Helper function to get current user's role from profiles table
-CREATE OR REPLACE FUNCTION current_user_role()
-RETURNS user_role
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT role FROM public.profiles WHERE id = auth.uid();
-$$;
-
--- Helper function to check if current user is admin
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT current_user_role() = 'admin';
-$$;
-
--- Helper function to check if current user is asset manager
-CREATE OR REPLACE FUNCTION is_asset_manager()
-RETURNS BOOLEAN
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT current_user_role() IN ('admin', 'asset_manager');
-$$;
-
--- Helper function to check if current user is department head (of given dept)
-CREATE OR REPLACE FUNCTION is_department_head(target_department_id UUID)
-RETURNS BOOLEAN
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM public.departments d
-        WHERE d.id = target_department_id
-        AND d.department_head_id = auth.uid()
-    ) OR current_user_role() IN ('admin', 'asset_manager');
-$$;
-
--- Helper function to check if user belongs to a department
-CREATE OR REPLACE FUNCTION belongs_to_department(target_department_id UUID)
-RETURNS BOOLEAN
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM public.profiles p
-        WHERE p.id = auth.uid()
-        AND p.department_id = target_department_id
-    ) OR is_department_head(target_department_id);
-$$;
-
--- Function to auto-generate asset tags
-CREATE OR REPLACE FUNCTION generate_asset_tag(organization_id_param UUID)
-RETURNS TEXT
-LANGUAGE PLPGSQL
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    last_tag TEXT;
-    tag_num INT;
-BEGIN
-    SELECT asset_tag INTO last_tag
-    FROM public.assets
-    WHERE organization_id = organization_id_param
-    ORDER BY asset_tag DESC
-    LIMIT 1;
-
-    IF last_tag IS NULL THEN
-        RETURN 'AF-0001';
-    END IF;
-
-    tag_num := (split_part(last_tag, '-', 2)::INT) + 1;
-    RETURN 'AF-' || lpad(tag_num::TEXT, 4, '0');
-END;
-$$;
-
--- Function to identify overdue allocations
-CREATE OR REPLACE FUNCTION mark_overdue_allocations()
-RETURNS VOID
-LANGUAGE PLPGSQL
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-BEGIN
-    UPDATE public.asset_allocations
-    SET status = 'overdue'
-    WHERE status = 'active'
-    AND expected_return_date IS NOT NULL
-    AND expected_return_date < NOW();
-END;
-$$;
-
--- Function to update booking statuses
-CREATE OR REPLACE FUNCTION update_booking_statuses()
-RETURNS VOID
-LANGUAGE PLPGSQL
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-BEGIN
-    -- Mark as ongoing if start time reached
-    UPDATE public.resource_bookings
-    SET status = 'ongoing'
-    WHERE status = 'upcoming'
-    AND start_time <= NOW()
-    AND end_time > NOW();
-
-    -- Mark as completed if end time reached
-    UPDATE public.resource_bookings
-    SET status = 'completed'
-    WHERE status IN ('upcoming', 'ongoing')
-    AND end_time <= NOW();
-END;
-$$;
-
--- =======================================
--- 3. DATABASE TABLES
+-- 2. DATABASE TABLES
 -- =======================================
 
 -- Organizations Table
@@ -274,9 +131,8 @@ CREATE TABLE public.profiles (
     employee_code TEXT,
     phone TEXT,
     avatar_url TEXT,
-    role user_role NOT NULL DEFAULT 'employee',
     department_id UUID,
-    job_title TEXT,
+    role user_role NOT NULL DEFAULT 'employee',
     status TEXT DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -321,8 +177,8 @@ CREATE TABLE public.locations (
     floor TEXT,
     room TEXT,
     address TEXT,
-    map_position_x DECIMAL(10, 2),
-    map_position_y DECIMAL(10, 2),
+    map_position_x NUMERIC,
+    map_position_y NUMERIC,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -335,10 +191,10 @@ CREATE TABLE public.desks (
     desk_code TEXT NOT NULL,
     label TEXT,
     assigned_employee_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    map_x DECIMAL(10, 2) NOT NULL,
-    map_y DECIMAL(10, 2) NOT NULL,
-    width DECIMAL(10, 2) NOT NULL DEFAULT 100,
-    height DECIMAL(10, 2) NOT NULL DEFAULT 100,
+    map_x NUMERIC(10,2) NOT NULL,
+    map_y NUMERIC(10,2) NOT NULL,
+    width NUMERIC(10,2) NOT NULL DEFAULT 100,
+    height NUMERIC(10,2) NOT NULL DEFAULT 100,
     qr_code_value TEXT,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -354,7 +210,7 @@ CREATE TABLE public.assets (
     serial_number TEXT,
     description TEXT,
     acquisition_date DATE,
-    acquisition_cost NUMERIC(15, 2),
+    acquisition_cost NUMERIC(15,2),
     warranty_expiry_date DATE,
     condition asset_condition NOT NULL DEFAULT 'good',
     status asset_status NOT NULL DEFAULT 'available',
@@ -399,8 +255,7 @@ CREATE TABLE public.asset_allocations (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT allocation_has_recipient CHECK (
         (employee_id IS NOT NULL) OR (department_id IS NOT NULL)
-    ),
-    CONSTRAINT only_one_active_allocation_per_asset UNIQUE (asset_id) INCLUDE (status)
+    )
 );
 
 -- Transfer Requests Table
@@ -420,10 +275,7 @@ CREATE TABLE public.transfer_requests (
     review_notes TEXT,
     reviewed_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT transfer_has_recipient CHECK (
-        (to_employee_id IS NOT NULL) OR (to_department_id IS NOT NULL)
-    )
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Resource Bookings Table
@@ -457,8 +309,8 @@ CREATE TABLE public.maintenance_requests (
     priority maintenance_priority NOT NULL DEFAULT 'medium',
     status maintenance_status NOT NULL DEFAULT 'pending',
     image_url TEXT,
-    estimated_cost NUMERIC(15, 2),
-    actual_cost NUMERIC(15, 2),
+    estimated_cost NUMERIC(15,2),
+    actual_cost NUMERIC(15,2),
     approved_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     approved_at TIMESTAMPTZ,
     started_at TIMESTAMPTZ,
@@ -578,6 +430,149 @@ CREATE TABLE public.chatbot_messages (
     tool_result JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- =======================================
+-- 3. HELPERS & UTILITY FUNCTIONS
+-- =======================================
+
+-- Helper function to get current organization id from JWT
+CREATE OR REPLACE FUNCTION current_organization_id()
+RETURNS UUID
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT nullif(current_setting('request.jwt.claims', true)::json->>'organization_id', '')::uuid;
+$$;
+
+-- Helper function to get current user's role from profiles table
+CREATE OR REPLACE FUNCTION current_user_role()
+RETURNS user_role
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT role FROM public.profiles WHERE id = auth.uid();
+$$;
+
+-- Helper function to check if current user is admin
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT current_user_role() = 'admin';
+$$;
+
+-- Helper function to check if current user is asset manager
+CREATE OR REPLACE FUNCTION is_asset_manager()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT current_user_role() IN ('admin', 'asset_manager');
+$$;
+
+-- Helper function to check if current user is department head (of given dept)
+CREATE OR REPLACE FUNCTION is_department_head(target_department_id UUID)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.departments d
+        WHERE d.id = target_department_id
+        AND d.department_head_id = auth.uid()
+    ) OR is_asset_manager();
+$$;
+
+-- Helper function to check if user belongs to a department
+CREATE OR REPLACE FUNCTION belongs_to_department(target_department_id UUID)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+        AND p.department_id = target_department_id
+    ) OR is_department_head(target_department_id);
+$$;
+
+-- Function to auto-generate asset tags
+CREATE OR REPLACE FUNCTION generate_asset_tag(org_id UUID)
+RETURNS TEXT
+LANGUAGE PLPGSQL
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    last_tag TEXT;
+    tag_num INT;
+BEGIN
+    SELECT asset_tag INTO last_tag
+    FROM public.assets
+    WHERE organization_id = org_id
+    ORDER BY asset_tag DESC
+    LIMIT 1;
+
+    IF last_tag IS NULL THEN
+        RETURN 'AF-0001';
+    END IF;
+
+    tag_num := (split_part(last_tag, '-', 2)::INT) + 1;
+    RETURN 'AF-' || lpad(tag_num::TEXT, 4, '0');
+END;
+$$;
+
+-- Function to identify overdue allocations
+CREATE OR REPLACE FUNCTION mark_overdue_allocations()
+RETURNS VOID
+LANGUAGE PLPGSQL
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    UPDATE public.asset_allocations
+    SET status = 'overdue'
+    WHERE status = 'active'
+    AND expected_return_date IS NOT NULL
+    AND expected_return_date < NOW();
+END;
+$$;
+
+-- Function to update booking statuses
+CREATE OR REPLACE FUNCTION update_booking_statuses()
+RETURNS VOID
+LANGUAGE PLPGSQL
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    -- Mark as ongoing if start time reached
+    UPDATE public.resource_bookings
+    SET status = 'ongoing'
+    WHERE status = 'upcoming'
+    AND start_time <= NOW()
+    AND end_time > NOW();
+
+    -- Mark as completed if end time reached
+    UPDATE public.resource_bookings
+    SET status = 'completed'
+    WHERE status IN ('upcoming', 'ongoing')
+    AND end_time <= NOW();
+END;
+$$;
 
 -- =======================================
 -- 4. DATABASE TRIGGERS
@@ -1066,10 +1061,10 @@ RETURNS TABLE (
     total_assets INT,
     available_assets INT,
     allocated_assets INT,
-    under_maintenance INT,
+    under_maintenance_assets INT,
     active_allocations INT,
     overdue_allocations INT,
-    pending_maintenance INT,
+    pending_maintenance_requests INT,
     upcoming_bookings INT,
     total_asset_value NUMERIC
 )
@@ -1081,10 +1076,10 @@ AS $$
         COUNT(*) FILTER (WHERE id IS NOT NULL)::INT AS total_assets,
         COUNT(*) FILTER (WHERE status = 'available')::INT AS available_assets,
         COUNT(*) FILTER (WHERE status = 'allocated')::INT AS allocated_assets,
-        COUNT(*) FILTER (WHERE status = 'under_maintenance')::INT AS under_maintenance,
+        COUNT(*) FILTER (WHERE status = 'under_maintenance')::INT AS under_maintenance_assets,
         (SELECT COUNT(*) FROM public.asset_allocations WHERE organization_id = org_id AND status = 'active')::INT AS active_allocations,
         (SELECT COUNT(*) FROM public.asset_allocations WHERE organization_id = org_id AND status = 'overdue')::INT AS overdue_allocations,
-        (SELECT COUNT(*) FROM public.maintenance_requests WHERE organization_id = org_id AND status IN ('pending', 'approved'))::INT AS pending_maintenance,
+        (SELECT COUNT(*) FROM public.maintenance_requests WHERE organization_id = org_id AND status IN ('pending', 'approved'))::INT AS pending_maintenance_requests,
         (SELECT COUNT(*) FROM public.resource_bookings WHERE organization_id = org_id AND status = 'upcoming')::INT AS upcoming_bookings,
         SUM(acquisition_cost) AS total_asset_value
     FROM public.assets
@@ -1094,4 +1089,3 @@ $$;
 -- =======================================
 -- 8. COMPLETED SCHEMA SETUP
 -- =======================================
-
