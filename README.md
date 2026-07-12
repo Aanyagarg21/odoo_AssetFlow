@@ -1,2 +1,2 @@
 # odoo_AssetFlow
-Virtual Rounf of oddo Hackathon 
+ This project is made under Virtual Round of oddo Hackathon 
