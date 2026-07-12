@@ -3,12 +3,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Lock, Mail, User, ArrowLeft, Loader2, Building2 } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, User, Building2, Loader2, CheckCircle2, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { createClient } from '@/lib/supabase/client';
 
-export default function SignupPage() {
+export default function OnboardingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -17,15 +17,16 @@ export default function SignupPage() {
     email: '',
     password: '',
     confirmPassword: '',
+    organizationName: '',
     organizationCode: ''
   });
   const router = useRouter();
   const supabase = createClient();
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleOnboarding = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.fullName || !formData.email || !formData.password || !formData.organizationCode) {
+    if (!formData.fullName || !formData.email || !formData.password || !formData.organizationName || !formData.organizationCode) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -37,14 +38,26 @@ export default function SignupPage() {
 
     setIsLoading(true);
     try {
-      // First, check if organization exists
-      const { data: org, error: orgError } = await supabase
+      // First, check if organization code is available
+      const { data: existingOrg, error: checkOrgError } = await supabase
         .from('organizations')
         .select('id')
         .eq('code', formData.organizationCode)
+        .maybeSingle();
+
+      if (existingOrg) throw new Error('Organization code already taken');
+
+      // Create organization
+      const { data: org, error: orgError } = await supabase
+        .from('organizations')
+        .insert({
+          name: formData.organizationName,
+          code: formData.organizationCode
+        })
+        .select('id')
         .single();
 
-      if (orgError) throw new Error('Invalid organization code');
+      if (orgError) throw orgError;
 
       // Sign up user
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -60,7 +73,7 @@ export default function SignupPage() {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Create profile
+        // Create profile as admin
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -68,17 +81,17 @@ export default function SignupPage() {
             organization_id: org.id,
             full_name: formData.fullName,
             email: formData.email,
-            role: 'employee'
+            role: 'admin'
           });
 
         if (profileError) throw profileError;
       }
 
-      toast.success('Account created! Please check your email for verification');
+      toast.success('Organization created! Please check your email for verification');
       router.push('/login');
       router.refresh();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create account');
+      toast.error(error.message || 'Failed to create organization');
     } finally {
       setIsLoading(false);
     }
@@ -101,40 +114,27 @@ export default function SignupPage() {
 
         <div className="max-w-lg mb-12">
           <h1 className="text-4xl font-bold text-gray-900 leading-tight mb-4">
-            Join Your Team
+            Launch Your
+            <br />
+            <span className="text-indigo-600">Asset Management</span>
           </h1>
           <p className="text-gray-600 text-lg">
-            Enter your organization code to create your employee account and start managing assets smarter.
+            Create your organization, invite your team, and start managing your assets smarter today.
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-12">
+        <div className="space-y-4 mb-12">
           {[
-            { label: 'Simple Onboarding', icon: '🚀' },
-            { label: 'Secure Signup', icon: '🔒' },
-            { label: 'Full Access', icon: '🎯' },
-            { label: 'Team Sync', icon: '🤝' }
-          ].map((feature, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3"
-            >
-              <span className="text-2xl">{feature.icon}</span>
-              <span className="font-medium text-gray-700">{feature.label}</span>
-            </motion.div>
+            'Create and customize your organization',
+            'Set up asset categories and locations',
+            'Invite your team members',
+            'Start tracking assets in minutes'
+          ].map((step, idx) => (
+            <div key={idx} className="flex items-start gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+              <CheckCircle2 className="w-6 h-6 text-green-500 mt-0.5" />
+              <p className="text-gray-700 font-medium">{step}</p>
+            </div>
           ))}
-        </div>
-
-        <div className="mt-auto">
-          <p className="text-sm text-gray-500">
-            Need to create a new organization?{' '}
-            <button onClick={() => router.push('/onboarding')} className="text-blue-600 font-semibold hover:text-blue-700">
-              Start onboarding
-            </button>
-          </p>
         </div>
       </motion.div>
 
@@ -147,21 +147,50 @@ export default function SignupPage() {
         <div className="w-full max-w-md">
           <button
             onClick={() => router.push('/login')}
-            className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-8"
+            className="text-gray-500 hover:text-gray-700 mb-8 font-medium"
           >
-            <ArrowLeft className="w-5 h-5" />
-            Back to login
+            ← Back to login
           </button>
 
           <div className="mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
-            <p className="text-gray-600">Sign up to join your organization</p>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Organization</h2>
+            <p className="text-gray-600">Set up your workspace and get started</p>
           </div>
 
-          <form onSubmit={handleSignup} className="space-y-5">
+          <form onSubmit={handleOnboarding} className="space-y-5">
+            {/* Organization Name */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Organization Name</label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={formData.organizationName}
+                  onChange={(e) => setFormData({ ...formData, organizationName: e.target.value })}
+                  placeholder="Your Company Name"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Organization Code */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Organization Code</label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={formData.organizationCode}
+                  onChange={(e) => setFormData({ ...formData, organizationCode: e.target.value.toUpperCase() })}
+                  placeholder="YOURCODE"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all uppercase"
+                />
+              </div>
+            </div>
+
             {/* Full Name */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Full Name</label>
+              <label className="text-sm font-medium text-gray-700">Your Name</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
@@ -176,7 +205,7 @@ export default function SignupPage() {
 
             {/* Email */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Company Email</label>
+              <label className="text-sm font-medium text-gray-700">Work Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
@@ -185,21 +214,6 @@ export default function SignupPage() {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="you@company.com"
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Organization Code */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Organization Code</label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={formData.organizationCode}
-                  onChange={(e) => setFormData({ ...formData, organizationCode: e.target.value })}
-                  placeholder="Enter organization code"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all uppercase"
                 />
               </div>
             </div>
@@ -256,16 +270,14 @@ export default function SignupPage() {
             >
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
-              ) : 'Create Account'}
+              ) : (
+                <>
+                  Create Organization
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </button>
           </form>
-
-          <p className="mt-8 text-center text-gray-600">
-            Already have an account?{' '}
-            <button onClick={() => router.push('/login')} className="text-blue-600 hover:text-blue-700 font-semibold">
-              Sign in
-            </button>
-          </p>
         </div>
       </motion.div>
     </div>

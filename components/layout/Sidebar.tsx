@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
@@ -19,27 +19,74 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import toast from "react-hot-toast";
+import { createClient } from "@/lib/supabase/client";
+import { rolePermissions, type UserRole } from "@/lib/permissions/permissions";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Organization Setup", href: "/organization", icon: Building2 },
-  { label: "Assets", href: "/assets", icon: Box },
-  { label: "Allocation & Transfer", href: "/allocations", icon: ArrowRightLeft },
-  { label: "Resource Booking", href: "/bookings", icon: Calendar },
-  { label: "Maintenance", href: "/maintenance", icon: Wrench },
-  { label: "Audit", href: "/audits", icon: ClipboardCheck },
-  { label: "Reports & Analytics", href: "/reports", icon: BarChart3 },
-  { label: "Notifications", href: "/notifications", icon: Bell },
-  { label: "Digital Office Map", href: "/office-map", icon: MapPin },
-  { label: "AI Assistant", href: "/ai-assistant", icon: Bot },
+const allNavItems = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
+  { label: "Organization Setup", href: "/organization", icon: Building2, key: "organization" },
+  { label: "Assets", href: "/assets", icon: Box, key: "assets" },
+  { label: "Allocation & Transfer", href: "/allocations", icon: ArrowRightLeft, key: "allocations" },
+  { label: "Resource Booking", href: "/bookings", icon: Calendar, key: "bookings" },
+  { label: "Maintenance", href: "/maintenance", icon: Wrench, key: "maintenance" },
+  { label: "Audit", href: "/audits", icon: ClipboardCheck, key: "audits" },
+  { label: "Reports & Analytics", href: "/reports", icon: BarChart3, key: "reports" },
+  { label: "Notifications", href: "/notifications", icon: Bell, key: "notifications" },
+  { label: "Digital Office Map", href: "/office-map", icon: MapPin, key: "office-map" },
+  { label: "AI Assistant", href: "/ai-assistant", icon: Bot, key: "ai-assistant" },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      
+      if (user) {
+        const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+        setProfile(data);
+      }
+      setLoading(false);
+    };
+    getUser();
+  }, [supabase]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success("Logged out successfully");
+    router.push("/login");
+    router.refresh();
+  };
+
+  const filteredNavItems = allNavItems.filter(item => {
+    if (!profile) return true;
+    return rolePermissions[profile.role as UserRole].includes(item.key as any);
+  });
+
+  const getInitials = (name: string) => {
+    return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  };
+
+  if (loading) {
+    return (
+      <div className="w-[260px] h-screen bg-white flex items-center justify-center">
+        <Loader2 className="animate-spin w-6 h-6 text-primary" />
+      </div>
+    );
+  }
 
   return (
     <motion.aside
@@ -87,7 +134,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        {navItems.map((item, index) => {
+        {filteredNavItems.map((item, index) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
 
@@ -123,11 +170,13 @@ export function Sidebar() {
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center text-primary font-bold">
-                JD
+                {profile?.full_name ? getInitials(profile.full_name) : "U"}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">John Doe</p>
-                <p className="text-xs text-muted-foreground truncate">Admin • TechCorp</p>
+                <p className="text-sm font-semibold text-foreground truncate">{profile?.full_name || "User"}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {(profile?.role?.charAt(0).toUpperCase() + profile?.role?.slice(1) || "User"}
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -135,7 +184,9 @@ export function Sidebar() {
                 <Settings size={18} />
                 <span className="text-xs">Settings</span>
               </button>
-              <button className="flex items-center justify-center gap-2 p-2 rounded-lg hover:bg-muted text-destructive hover:bg-destructive/10 transition-colors">
+              <button 
+                onClick={handleLogout}
+                className="flex items-center justify-center gap-2 p-2 rounded-lg hover:bg-muted text-destructive hover:bg-destructive/10 transition-colors">
                 <LogOut size={18} />
                 <span className="text-xs">Logout</span>
               </button>
@@ -144,13 +195,15 @@ export function Sidebar() {
         ) : (
           <div className="space-y-3">
             <div className="h-10 w-10 mx-auto rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center text-primary font-bold">
-              JD
+              {profile?.full_name ? getInitials(profile.full_name) : "U"}
             </div>
             <div className="flex flex-col items-center gap-2">
               <button className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                 <Settings size={18} />
               </button>
-              <button className="p-2 rounded-lg hover:bg-muted text-destructive hover:bg-destructive/10 transition-colors">
+              <button 
+                onClick={handleLogout}
+                className="p-2 rounded-lg hover:bg-muted text-destructive hover:bg-destructive/10 transition-colors">
                 <LogOut size={18} />
               </button>
             </div>
