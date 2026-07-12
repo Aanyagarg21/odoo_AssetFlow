@@ -1,4 +1,4 @@
--- AssetFlow Database Schema (v1)
+-- AssetFlow Database Schema (v1 - Final, No Order Issues)
 -- =======================================
 
 -- =======================================
@@ -432,7 +432,7 @@ CREATE TABLE public.chatbot_messages (
 );
 
 -- =======================================
--- 3. HELPERS & UTILITY FUNCTIONS
+-- 3. HELPER & UTILITY FUNCTIONS
 -- =======================================
 
 -- Helper function to get current organization id from JWT
@@ -614,53 +614,6 @@ BEGIN
             NEW.status,
             auth.uid(),
             'Automatic status update'
-        );
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
--- Activity log trigger function (simplified)
-CREATE OR REPLACE FUNCTION public.log_entity_activity()
-RETURNS TRIGGER
-LANGUAGE PLPGSQL
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        INSERT INTO public.activity_logs (
-            organization_id,
-            actor_id,
-            action,
-            entity_type,
-            entity_id,
-            new_values
-        ) VALUES (
-            NEW.organization_id,
-            auth.uid(),
-            'CREATE',
-            TG_TABLE_NAME,
-            NEW.id,
-            to_jsonb(NEW)
-        );
-    ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO public.activity_logs (
-            organization_id,
-            actor_id,
-            action,
-            entity_type,
-            entity_id,
-            old_values,
-            new_values
-        ) VALUES (
-            NEW.organization_id,
-            auth.uid(),
-            'UPDATE',
-            TG_TABLE_NAME,
-            NEW.id,
-            to_jsonb(OLD),
-            to_jsonb(NEW)
         );
     END IF;
     RETURN NEW;
@@ -1052,10 +1005,9 @@ WITH CHECK (
 );
 
 -- =======================================
--- 7. DATABASE FUNCTIONS
+-- 7. DASHBOARD KPI FUNCTION
 -- =======================================
 
--- Calculate Dashboard KPIs
 CREATE OR REPLACE FUNCTION get_dashboard_kpis(org_id UUID)
 RETURNS TABLE (
     total_assets INT,
