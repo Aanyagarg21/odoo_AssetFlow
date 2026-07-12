@@ -18,7 +18,7 @@ const routeMap: Record<string, RouteAccess> = {
   '/organization': 'organization'
 };
 
-export async function updateSession(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
