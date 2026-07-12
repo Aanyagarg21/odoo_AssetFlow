@@ -1,6 +1,20 @@
 
 -- Quick fix: Ensure organizations table exists and has correct RLS for onboarding
 
+-- First, create user_role type if it doesn't exist!
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM (
+        'admin',
+        'asset_manager',
+        'department_head',
+        'employee',
+        'auditor',
+        'technician'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
 -- First, make sure the organizations table is there (in case 001 wasn't fully applied)
 CREATE TABLE IF NOT EXISTS public.organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
