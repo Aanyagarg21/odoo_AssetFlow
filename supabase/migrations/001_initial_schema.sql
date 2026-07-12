@@ -2,115 +2,159 @@
 -- =======================================
 
 -- =======================================
--- 1. CORE ENUM TYPES
+-- 1. CORE ENUM TYPES (with error handling)
 -- =======================================
 
-CREATE TYPE user_role AS ENUM (
-    'admin',
-    'asset_manager',
-    'department_head',
-    'employee',
-    'auditor',
-    'technician'
-);
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM (
+        'admin',
+        'asset_manager',
+        'department_head',
+        'employee',
+        'auditor',
+        'technician'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE asset_status AS ENUM (
-    'available',
-    'allocated',
-    'reserved',
-    'under_maintenance',
-    'lost',
-    'retired',
-    'disposed'
-);
+DO $$ BEGIN
+    CREATE TYPE asset_status AS ENUM (
+        'available',
+        'allocated',
+        'reserved',
+        'under_maintenance',
+        'lost',
+        'retired',
+        'disposed'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE asset_condition AS ENUM (
-    'new',
-    'excellent',
-    'good',
-    'fair',
-    'damaged',
-    'unusable'
-);
+DO $$ BEGIN
+    CREATE TYPE asset_condition AS ENUM (
+        'new',
+        'excellent',
+        'good',
+        'fair',
+        'damaged',
+        'unusable'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE allocation_status AS ENUM (
-    'active',
-    'returned',
-    'overdue',
-    'cancelled'
-);
+DO $$ BEGIN
+    CREATE TYPE allocation_status AS ENUM (
+        'active',
+        'returned',
+        'overdue',
+        'cancelled'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE transfer_status AS ENUM (
-    'requested',
-    'approved',
-    'rejected',
-    'completed',
-    'cancelled'
-);
+DO $$ BEGIN
+    CREATE TYPE transfer_status AS ENUM (
+        'requested',
+        'approved',
+        'rejected',
+        'completed',
+        'cancelled'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE booking_status AS ENUM (
-    'upcoming',
-    'ongoing',
-    'completed',
-    'cancelled'
-);
+DO $$ BEGIN
+    CREATE TYPE booking_status AS ENUM (
+        'upcoming',
+        'ongoing',
+        'completed',
+        'cancelled'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE maintenance_status AS ENUM (
-    'pending',
-    'approved',
-    'rejected',
-    'technician_assigned',
-    'in_progress',
-    'resolved',
-    'cancelled'
-);
+DO $$ BEGIN
+    CREATE TYPE maintenance_status AS ENUM (
+        'pending',
+        'approved',
+        'rejected',
+        'technician_assigned',
+        'in_progress',
+        'resolved',
+        'cancelled'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE maintenance_priority AS ENUM (
-    'low',
-    'medium',
-    'high',
-    'critical'
-);
+DO $$ BEGIN
+    CREATE TYPE maintenance_priority AS ENUM (
+        'low',
+        'medium',
+        'high',
+        'critical'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE audit_status AS ENUM (
-    'draft',
-    'scheduled',
-    'in_progress',
-    'completed',
-    'closed'
-);
+DO $$ BEGIN
+    CREATE TYPE audit_status AS ENUM (
+        'draft',
+        'scheduled',
+        'in_progress',
+        'completed',
+        'closed'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE audit_verification AS ENUM (
-    'pending',
-    'verified',
-    'missing',
-    'damaged',
-    'wrong_location'
-);
+DO $$ BEGIN
+    CREATE TYPE audit_verification AS ENUM (
+        'pending',
+        'verified',
+        'missing',
+        'damaged',
+        'wrong_location'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE notification_type AS ENUM (
-    'asset_assigned',
-    'transfer_requested',
-    'transfer_approved',
-    'transfer_rejected',
-    'maintenance_requested',
-    'maintenance_approved',
-    'maintenance_rejected',
-    'booking_confirmed',
-    'booking_cancelled',
-    'booking_reminder',
-    'overdue_return',
-    'audit_assigned',
-    'audit_discrepancy',
-    'general'
-);
+DO $$ BEGIN
+    CREATE TYPE notification_type AS ENUM (
+        'asset_assigned',
+        'transfer_requested',
+        'transfer_approved',
+        'transfer_rejected',
+        'maintenance_requested',
+        'maintenance_approved',
+        'maintenance_rejected',
+        'booking_confirmed',
+        'booking_cancelled',
+        'booking_reminder',
+        'overdue_return',
+        'audit_assigned',
+        'audit_discrepancy',
+        'general'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =======================================
 -- 2. DATABASE TABLES
 -- =======================================
 
 -- Organizations Table
-CREATE TABLE public.organizations (
+CREATE TABLE IF NOT EXISTS public.organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     code TEXT UNIQUE NOT NULL,
@@ -123,7 +167,7 @@ CREATE TABLE public.organizations (
 );
 
 -- Profiles Table
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL,
@@ -139,7 +183,7 @@ CREATE TABLE public.profiles (
 );
 
 -- Departments Table
-CREATE TABLE public.departments (
+CREATE TABLE IF NOT EXISTS public.departments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -154,7 +198,7 @@ CREATE TABLE public.departments (
 );
 
 -- Asset Categories Table
-CREATE TABLE public.asset_categories (
+CREATE TABLE IF NOT EXISTS public.asset_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -169,7 +213,7 @@ CREATE TABLE public.asset_categories (
 );
 
 -- Locations Table
-CREATE TABLE public.locations (
+CREATE TABLE IF NOT EXISTS public.locations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -184,7 +228,7 @@ CREATE TABLE public.locations (
 );
 
 -- Desks Table
-CREATE TABLE public.desks (
+CREATE TABLE IF NOT EXISTS public.desks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     location_id UUID REFERENCES public.locations(id) ON DELETE SET NULL,
@@ -201,7 +245,7 @@ CREATE TABLE public.desks (
 );
 
 -- Assets Table
-CREATE TABLE public.assets (
+CREATE TABLE IF NOT EXISTS public.assets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     asset_tag TEXT NOT NULL,
@@ -236,7 +280,7 @@ CREATE TABLE public.assets (
 );
 
 -- Asset Allocations Table
-CREATE TABLE public.asset_allocations (
+CREATE TABLE IF NOT EXISTS public.asset_allocations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
@@ -259,7 +303,7 @@ CREATE TABLE public.asset_allocations (
 );
 
 -- Transfer Requests Table
-CREATE TABLE public.transfer_requests (
+CREATE TABLE IF NOT EXISTS public.transfer_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
@@ -279,7 +323,7 @@ CREATE TABLE public.transfer_requests (
 );
 
 -- Resource Bookings Table
-CREATE TABLE public.resource_bookings (
+CREATE TABLE IF NOT EXISTS public.resource_bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
@@ -298,7 +342,7 @@ CREATE TABLE public.resource_bookings (
 );
 
 -- Maintenance Requests Table
-CREATE TABLE public.maintenance_requests (
+CREATE TABLE IF NOT EXISTS public.maintenance_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
@@ -321,7 +365,7 @@ CREATE TABLE public.maintenance_requests (
 );
 
 -- Audit Cycles Table
-CREATE TABLE public.audit_cycles (
+CREATE TABLE IF NOT EXISTS public.audit_cycles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
@@ -338,7 +382,7 @@ CREATE TABLE public.audit_cycles (
 );
 
 -- Audit Assignments Table
-CREATE TABLE public.audit_assignments (
+CREATE TABLE IF NOT EXISTS public.audit_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     audit_cycle_id UUID NOT NULL REFERENCES public.audit_cycles(id) ON DELETE CASCADE,
     auditor_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -346,7 +390,7 @@ CREATE TABLE public.audit_assignments (
 );
 
 -- Audit Items Table
-CREATE TABLE public.audit_items (
+CREATE TABLE IF NOT EXISTS public.audit_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     audit_cycle_id UUID NOT NULL REFERENCES public.audit_cycles(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
@@ -360,7 +404,7 @@ CREATE TABLE public.audit_items (
 );
 
 -- Notifications Table
-CREATE TABLE public.notifications (
+CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     recipient_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -375,7 +419,7 @@ CREATE TABLE public.notifications (
 );
 
 -- Activity Logs Table
-CREATE TABLE public.activity_logs (
+CREATE TABLE IF NOT EXISTS public.activity_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     actor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -389,7 +433,7 @@ CREATE TABLE public.activity_logs (
 );
 
 -- Asset Status History Table
-CREATE TABLE public.asset_status_history (
+CREATE TABLE IF NOT EXISTS public.asset_status_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
@@ -401,7 +445,7 @@ CREATE TABLE public.asset_status_history (
 );
 
 -- Saved AI Queries Table
-CREATE TABLE public.saved_ai_queries (
+CREATE TABLE IF NOT EXISTS public.saved_ai_queries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -411,7 +455,7 @@ CREATE TABLE public.saved_ai_queries (
 );
 
 -- Chatbot Conversations Table
-CREATE TABLE public.chatbot_conversations (
+CREATE TABLE IF NOT EXISTS public.chatbot_conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -421,7 +465,7 @@ CREATE TABLE public.chatbot_conversations (
 );
 
 -- Chatbot Messages Table
-CREATE TABLE public.chatbot_messages (
+CREATE TABLE IF NOT EXISTS public.chatbot_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES public.chatbot_conversations(id) ON DELETE CASCADE,
     role TEXT NOT NULL,
