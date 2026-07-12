@@ -26,6 +26,8 @@ export default function OnboardingPage() {
   const handleOnboarding = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('Starting onboarding with form data:', formData);
+    
     if (!formData.fullName || !formData.email || !formData.password || !formData.organizationName || !formData.organizationCode) {
       toast.error('Please fill in all fields');
       return;
@@ -39,15 +41,21 @@ export default function OnboardingPage() {
     setIsLoading(true);
     try {
       // First, check if organization code is available
+      console.log('Checking organization code...');
       const { data: existingOrg, error: checkOrgError } = await supabase
         .from('organizations')
         .select('id')
         .eq('code', formData.organizationCode)
         .maybeSingle();
 
+      if (checkOrgError) {
+        console.error('Error checking organization code:', checkOrgError);
+        throw checkOrgError;
+      }
       if (existingOrg) throw new Error('Organization code already taken');
 
       // Create organization
+      console.log('Creating organization...');
       const { data: org, error: orgError } = await supabase
         .from('organizations')
         .insert({
@@ -57,9 +65,14 @@ export default function OnboardingPage() {
         .select('id')
         .single();
 
-      if (orgError) throw orgError;
+      if (orgError) {
+        console.error('Error creating organization:', orgError);
+        throw orgError;
+      }
+      console.log('Organization created successfully:', org);
 
       // Sign up user
+      console.log('Signing up user...');
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -70,10 +83,15 @@ export default function OnboardingPage() {
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('Error signing up user:', authError);
+        throw authError;
+      }
+      console.log('User signed up successfully:', authData);
 
       if (authData.user) {
         // Create profile as admin
+        console.log('Creating profile...');
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -84,13 +102,18 @@ export default function OnboardingPage() {
             role: 'admin'
           });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          throw profileError;
+        }
+        console.log('Profile created successfully!');
       }
 
       toast.success('Organization created! Please check your email for verification');
       router.push('/login');
       router.refresh();
     } catch (error: any) {
+      console.error('Onboarding error:', error);
       toast.error(error.message || 'Failed to create organization');
     } finally {
       setIsLoading(false);
